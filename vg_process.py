@@ -16,7 +16,8 @@ attr_to_pull = 'img_link'
 def pull_bnw_photo(url):
 	response = requests.get(url)
 	img = Image.open(BytesIO(response.content)).convert('L')
-	np_img = np.array(img)/255
+	#rounding to minimize storage use
+	np_img = np.around(np.array(img)/255, decimals=4)
 	return np_img.tolist()
 
 #pulls a games summary
@@ -43,17 +44,18 @@ def pull_pic(url):
 	try:
 		return pull_bnw_photo(url)
 	except:
-		return [[0,0],[0,0]]
+		return [[0.0,0.0],[0.0,0.0]]
 def pull_summary(url):
 	try:
 		return pull_txt_sum(url)
 	except:
 		return url
 
-#needed to batch these dictionaries as it was getting pretty large
-#produces a list of n dictionaries
+#needed to batch these dictionaries as it was getting pretty large, produces a list of n dictionaries
+#IMPT, this shuffles, so everytime this is remade, order is different. Cna't compare to previously written files with different batch
 def batch_dic(dic):
 	kys = np.array(list(dic.keys()))
+	np.random.shuffle(kys)
 	#splitting with numpy, did it to make sure every game included
 	splits = np.array_split(kys,btch_size)
 	ret_dics = []
@@ -123,11 +125,10 @@ start_time = time.time()
 #go through each batch
 for dex, dic_seg in enumerate(batches):
 	#if we loaded the batches, want to make sure we don't re run games
-	if not set(dic_seg.keys()) < set(completed_games):
+	if not (set(dic_seg.keys()) < set(completed_games) or set(dic_seg.keys()) == set(completed_games)):
 		print("Batch #%s of %s, Batch Size %s of %s total games - %s seconds" % (dex,len_bathces,len(dic_seg),len_games,round(time.time() - start_time,4)))
 		#run through a batches game image links or game urls, download and save
 		run_and_save(dic_seg, attr_to_pull, func_dic[attr_to_pull], str(dex))
 		save_j(list(dic_seg.keys())+completed_games,attr_to_pull+'/completed_games')
 	else:
 		print("Batch #%s is already loaded in %s/" % (str(dex),attr_to_pull))
-		time.sleep(.001)
