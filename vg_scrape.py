@@ -1,6 +1,8 @@
-'''this library holds functions for scraping from vg chartz.
-Kept separate cause it doesn different thigns
+'''this script for scraping from vg chartz.
+/home/nbdy/Desktop/Cloud/Projects/game_dir/Gaming
+if run on server, this script will keep running even when local pc asleep
 '''
+#import pdb
 #these are some libraries I think I will use
 import re
 import scraperwiki
@@ -11,10 +13,22 @@ from io import BytesIO
 import numpy as np
 from IPython.display import display
 import json
+from time import sleep
+from random import shuffle
+import os
 #used for one recursion function
 RECUR_LIM = 15
 #used for when to predict success
-CHECK_IN = 1000
+CHECK_IN = 400
+
+#little write/read json functions
+def write_json(data, path):
+	with open(path+'.json', 'w') as f:
+		json.dump(data, f)
+
+def read_json(path):
+	with open(path+'.json') as f:
+		return json.load(f)
 
 #used in the pull
 def recur_attr_pull(el, fnd='src', tried=0):
@@ -90,68 +104,94 @@ def pull_img(url):
 	return Image.open(BytesIO(response.content))#.convert('RGB')
 
 def main():
-	#TODO load in all the urls to scrape form json file
-	all_pages = loads('ALL_PAGE_URLS.txt')
-	#run through pages and scrape basic info
-	all_games = {}
-	bad_urls = []
-	for dex, page in enumerate(all_pages):
-		upd_games, bads = scrape_page(page)
-		#update and extend our new games
-		all_games.update(upd_games)
-		bad_urls.extend(bads)
-		#TODO save a json file with all this info, keep over writing it
-		#not the most memory effecient but I didn't want to keep saving to new files
-		json.saves(all_games)
+	#ran first scrape succesful, needed to make changes on second
+	try:
+		all_games = read_json('GAME_INFO')
+		bad_urls = read_json('BAD_GAMES')
+		print('\n\n---Loaded game info and bad game info from json---\n\n')
+	except Exception as e:
+		print(e)
+		#if the games file is missing
+		#load in all the urls to scrape form json file
+		all_pages = read_json('ALL_PAGE_URLS')
+		#shuffling to not overload server
+		shuffle(all_pages)
+		#run through pages and scrape basic info
+		all_games = {}
+		bad_urls = []
+		for dex, page in enumerate(all_pages):
+			upd_games, bads = scrape_page(page)
+			#update and extend our new games
+			all_games.update(upd_games)
+			bad_urls.extend(bads)
+
+			if dex*100 % CHECK_IN == 0:
+				print('Epoch #%s' % dex)
+				print('Succesfully scraped %s total games' % len(all_games))
+				print('Failed to scrape %s total games' % len(bad_urls))
+			sleep(.001)
+		#save a json file with all this info, keep over writing it
+		#writing all at once, writining continually took way too long
+		write_json(all_games, 'GAME_INFO')
 		#do the exact same with the bad urls
-		json.saves(bad_urls)
-
-		if dex % CHECK_IN == 0:
-			print('Epoch #%s' % dex)
-			print('Succesfully scraped %s total games' % len(all_games))
-			print('Failed to scrape %s total games' % len(bad_urls))
-
-	print('\n\n---Scraped all pages meta data, moving to game descriptions---\n\n')
-	#once that is done, run through all_games and scrape text
-	dex, succ, fail = 0,0,0
-	for game, atts in all_games.items():
-		try:
-			#scrape the page, save resutls into a text file with name of game
-			txt = pull_txt_sum(atts['game_url'])
-			#TODO save file with gamename as file naem and txt as content
-			saves(game, txt)
-			succ += 1
-		except Exception as e:
-			print("Couldn't pull %s description from %s" % (game, atts['game_url']))
-			print(e)
-			fail += 1
-		dex +=1
-		if dex % CHECK_IN == 0:
-			print('Epoch #%s' % dex)
-			print('Succesfully scraped %s total game descriptions' % succ)
-			print('Failed to scrape %s total games descriptions' % fail)
-
-	
-	print('\n\n---Scraped all game descriptions, moving to game images---\n\n')
+		write_json(bad_urls, 'BAD_GAMES')
+		print('\n\n---Scraped and saved all pages meta data, moving to game images---\n\n')
+		#once that is done, run through all_games and scrape image
+	sleep(1)
 	#once that is done, run through all_games and scrape images
-	dex, succ, fail = 0,0,0
+	dex, succ, fail, pre = 0,0,0,0
+	#adding this because scraping was succesful for some games already
+	already_scraped = set(os.listdir("/home/nbdy/Desktop/Local/Data/game_data/imgs/"))
 	for game, atts in all_games.items():
+		if 'img_'+game.replace(' ','').replace('/','--')+'.bmp' in already_scraped:
+			pre+=1
+			continue
 		try:
-			#scrape the page, save resutls into a text file with name of game
+			#scrape the page, save resutls into a image file with name of game
 			img = pull_img(atts['img_url'])
-			#TODO save file with gamename as file naem and image as content
-			saves(game, img)
+			out_path = '/home/nbdy/Desktop/Local/Data/game_data/imgs/img_'+game.replace(' ','').replace('/','--')+'.bmp'
+			#save file with gamename as file naem and image as content
+			img.save(out_path)
 			succ += 1
 		except Exception as e:
 			print("Couldn't pull %s image from %s" % (game, atts['img_url']))
 			print(e)
 			fail += 1
-		dex +=1
 		if dex % CHECK_IN == 0:
 			print('Epoch #%s' % dex)
 			print('Succesfully scraped %s total game images' % succ)
+			print('Succesfully loaded %s total game images' % pre)
 			print('Failed to scrape %s total games images' % fail)
-	print('\n\n---Scraped all games images, exiting---')
+		dex +=1
+
+
+	dex, succ, fail, pre = 0,0,0,0
+	#adding this because scraping was succesful for some games already
+	already_scraped = set(os.listdir("/home/nbdy/Desktop/Local/Data/game_data/txts/"))
+	for game, atts in all_games.items():
+		if 'txt_'+game.replace(' ','').replace('/','--')+'.json' in already_scraped:
+			pre+=1
+			continue
+		try:
+			#scrape the page, save resutls into a text file with name of game
+			txt = pull_txt_sum(atts['game_url'])
+			#had to add this because got games with spaces in it (there could be / too) MAKE SURE YOU REMEMBER THIS AT LOAD TIME
+			out_path = '/home/nbdy/Desktop/Local/Data/game_data/txts/txt_'+game.replace(' ','').replace('/','--')
+			#save file with gamename as file naem and txt as content
+			write_json(txt, out_path)
+			succ += 1
+		except Exception as e:
+			print("Couldn't pull %s description from %s" % (game, atts['game_url']))
+			print(e)
+			fail += 1
+		if dex % CHECK_IN == 0:
+			print('Epoch #%s' % dex)
+			print('Succesfully scraped %s total game descriptions' % succ)
+			print('Succesfully loaded %s total game images' % pre)
+			print('Failed to scrape %s total games descriptions' % fail)
+		dex +=1
+
+	print('\n\n---Scraped all game texts---')
 
 if __name__ == "__main__":
 	main()
