@@ -13,8 +13,29 @@ from PIL import Image
 import numpy as np
 import json
 
-#GCP api tokens stored offline for security
-GCP_TOKS = json.loads()
+PROJ = 'vg-analysis'
+BUCKET = 'vg-analysis-data'
+LOCAL_PATH = '/home/nbdy/Desktop/Local/Data/game_data/'
+
+def flex_open(path, typ, loc=''):
+	if loc == 'gcs':
+		import gcsfs
+		fs = gcsfs.GCSFileSystem(project=PROJ)
+		return fs.open(BUCKET+'/'+path, typ)
+	else:
+		return open(LOCAL_PATH+path, typ)
+
+def flex_open_img(path, typ, loc=''):
+	if loc == 'gcs':
+		from google.cloud import storage
+		import io
+		client = storage.Client()
+		bucket = client.get_bucket(BUCKET)
+		blob = bucket.get_blob(path).download_as_string()
+		bytes = io.BytesIO(blob)
+		return Image.open(bytes, typ)
+	else:
+		return Image.open(LOCAL_PATH+path, typ)
 
 #parent class holding all init loading and saving methods
 class game_par:
@@ -22,39 +43,39 @@ class game_par:
 		self.name = name
 		self.data = data
 
-	#these functions load and save files locally and on GCP
-	def load_local(self, local_path_in, pull_file=False):
-		self.local_path_in = local_path_in
+	def load(self, path_in, pull_file=False, read_loc=''):
+		self.path_in = path_in
 		if pull_file:
-			#TODO loads image from path into self, don't forget the with
-			self.data = loads(local_path_in)	
-		
-	def load_gcp(self, gcp_path_in, pull_file=False):
-		self.gcp_path_in = gcp_path_in
-		if pull_file:
-			#TODO use gsutil to loads
-			self.data = gsutil_loads(gcp_path_in)
-
-	def save_local(self, local_path_out='', overwrite=False):
-		if overwrite and self.local_path_in:
-			#TODO, saves to local file with same name
-			#don't forget with
-			saves(self.data, self.local_path_in)
-		elif local_path_out:
-			saves(self.data, local_path_out)
+			#loads game from path into self, don't forget the with
+			if '.json' in path_in:
+				with flex_open(path_in, 'r', read_loc) as f:
+					self.data = json.load(f)
+			elif '.bmp' in path_in:
+				self.data = flex_open_img(path_in, 'r', read_loc)
+			else:
+				print('Invalid path')
+				return
+			print('Loaded file into memory')
 		else:
+			print('Path saved, file NOT loaded into memory')
+
+	def save(self, path_out='', overwrite=False, write_loc=''):
+		if overwrite and self.path_in:
+			#if overwriting, save to path in
+			path_out = self.path_in
+		#if there is no path and no overwrite
+		elif not path_out:
 			print('Unable to save, please define path out or define path in and overwrite')
-			
-	def save_gcp(self, gcp_path_out='', overwrite=False):
-		if overwrite and self.gcp_path_in:
-			#TODO, saves to gcp file with same name
-			#don't forget with
-			saves(self.data, self.gcp_path_in)
-		elif gcp_path_out:
-			saves(self.data, gcp_path_out)
+			return
+		if '.json' in path_out:
+			with flex_open(path_out, 'w', write_loc) as f:
+				self.data = json.load(f)
+		elif '.bmp' in path_out:
+			self.data = flex_open_img(path_out, 'w', write_loc)
 		else:
-			print('Unable to save, please define gcp path out or define gcp path in and overwrite')
+			print('Invalid path')
 
+#keeping this class very lean
 class game_img(game_par):
 	#3 google APIs, they all run off files stored in GCP
 	def gcp_api_faces(self):
