@@ -12,6 +12,9 @@ import re
 from PIL import Image
 import numpy as np
 import json
+from google.cloud import vision
+from google.cloud import language_v1
+from google.cloud.language_v1 import enums
 
 PROJ = 'vg-analysis'
 BUCKET = 'vg-analysis-data'
@@ -42,7 +45,7 @@ class game_par:
 	def __init__(self, name, data=None):
 		self.name = name
 		self.data = data
-
+		self.path_in = None
 	def load(self, path_in, pull_file=False, read_loc=''):
 		self.path_in = path_in
 		if pull_file:
@@ -69,33 +72,63 @@ class game_par:
 			return
 		if '.json' in path_out:
 			with flex_open(path_out, 'w', write_loc) as f:
-				json.dumps(self.data, f)
+				json.dump(self.data, f)
 		elif '.bmp' in path_out:
-			self.data = flex_open_img(path_out, 'w', write_loc)# https://pillow.readthedocs.io/en/3.1.x/reference/Image.html
+			self.data = flex_open_img(path_out, 'w', write_loc)#TODO https://pillow.readthedocs.io/en/3.1.x/reference/Image.html
 		else:
 			print('Invalid path')
 
 #keeping this class very lean
 class game_img(game_par):
 	#3 google APIs, they all run off files stored in GCP
-	def gcp_api_faces(self):
-		#TODO this runs GCP's facial detectin api
-		return #https://cloud.google.com/vision/docs/detecting-faces
+	def set_api_vars(self, use_local=False):
+		self.client = vision.ImageAnnotatorClient()
+		#can use currently loaded image 
+		if use_local and self.data:
+			self.image = vision.types.Image(content=self.data)
+		#or the path to file
+		elif self.path_in:
+			self.image = vision.types.Image()
+			self.image.source.image_uri = 'gs://'+BUCKET+'/'+self.path_in
+			
+	def gcp_api_objects(self):
+		#https://cloud.google.com/vision/docs/object-localizer
+		self.img_objects = self.client.object_localization(image=self.image).localized_object_annotations
+		return self.img_objects
+	
 	def gcp_api_properties(self):
-		#TODO this runs GCP's image properties API
-		return #https://cloud.google.com/vision/docs/detecting-properties
+		#https://cloud.google.com/vision/docs/detecting-properties
+		self.img_properties = self.client.image_properties(image=self.image).image_properties_annotation
+		return self.img_properties
+	
 	def gcp_api_labels(self):
-		#TODO this runs GCP's label detection API
-		return #https://cloud.google.com/vision/docs/labels
+		#https://cloud.google.com/vision/docs/labels
+		self.img_labels = self.client.label_detection(image=self.image).label_annotations
+		return self.img_labels
+	
 class game_txt(game_par):
 	#3 google APIs, must run off files tored in GCP
+	def set_api_vars(self, use_local=False):
+		self.client = language_v1.LanguageServiceClient()
+		self.document = {"type": enums.Document.Type.PLAIN_TEXT, "language": 'en'} #uses dic with values as base
+		self.encoding_type = enums.EncodingType.UTF8
+		#same as image, can load from ram or file
+		if use_local and self.data:
+			self.document["content"] = self.data
+		elif self.path_in:
+			self.document["gcs_content_uri"] = 'gs://'+BUCKET+'/'+self.path_in
+			
 	def gcp_api_sentiment(self):
-		#TODO runs GCP's sentiment analysis DUAI API
-		return #https://cloud.google.com/natural-language/docs/analyzing-sentiment#language-sentiment-string-python
+		#https://cloud.google.com/natural-language/docs/analyzing-sentiment#language-sentiment-string-python
+		self.txt_sentiment = self.client.analyze_sentiment(self.document, encoding_type=self.encoding_type)
+		return self.txt_sentiment
+	
 	def gcp_api_ent_sent(self):
-		#TODO runs GCP's entity sentiment analysis tool
-		return #https://cloud.google.com/natural-language/docs/analyzing-entity-sentiment
+		#https://cloud.google.com/natural-language/docs/analyzing-entity-sentiment
+		self.txt_ent_sentiment =  self.client.analyze_entity_sentiment(self.document, encoding_type=self.encoding_type)
+		return self.txt_ent_sentiment
+	
 	def gcp_api_classify(self):
-		#TODO runs GCP's content classfification
-		return #https://cloud.google.com/natural-language/docs/classifying-text
-
+		#https://cloud.google.com/natural-language/docs/classifying-text
+		self.txt_class =  self.client.classify_text(self.document)
+		return self.txt_class
