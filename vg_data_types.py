@@ -69,9 +69,9 @@ class game_par:
 			return
 		if '.json' in path_out:
 			with flex_open(path_out, 'w', write_loc) as f:
-				self.data = json.load(f)
+				json.dumps(self.data, f)
 		elif '.bmp' in path_out:
-			self.data = flex_open_img(path_out, 'w', write_loc)
+			self.data = flex_open_img(path_out, 'w', write_loc)# https://pillow.readthedocs.io/en/3.1.x/reference/Image.html
 		else:
 			print('Invalid path')
 
