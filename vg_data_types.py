@@ -1,12 +1,3 @@
-'''this library holds 3 main classes based on the data used in modeling.
-the three main classes are
-	game_demo
-	game_img
-	game_txt
-these all inherit from one class called game_par
-	game_par contains loading methods and sotrage abilities
-'''
-
 #these are some libraries I think I will use
 import re
 from PIL import Image
@@ -15,6 +6,10 @@ import json
 from google.cloud import vision
 from google.cloud import language_v1
 from google.cloud.language_v1 import enums
+from google.cloud import storage
+import io
+import gcsfs
+from google.protobuf.json_format import MessageToJson
 
 #not good to have here
 PROJ = 'vg-analysis'
@@ -27,7 +22,6 @@ LANGUAGE_CLIENT = language_v1.LanguageServiceClient()
 
 def flex_open(path, typ, loc=''):
 	if loc == 'gcs':
-		import gcsfs
 		fs = gcsfs.GCSFileSystem(project=PROJ)
 		return fs.open(BUCKET+'/'+path, typ)
 	else:
@@ -35,8 +29,6 @@ def flex_open(path, typ, loc=''):
 
 def flex_open_img(path, typ, loc=''):
 	if loc == 'gcs':
-		from google.cloud import storage
-		import io
 		bucket = STORAGE_CLIENT.get_bucket(BUCKET)
 		blob = bucket.get_blob(path).download_as_string()
 		bytes = io.BytesIO(blob)
@@ -62,9 +54,9 @@ class game_par:
 			else:
 				print('Invalid path')
 				return
-			print('Loaded file into memory')
+			return 'Loaded file into memory'
 		else:
-			print('Path saved, file NOT loaded into memory')
+			return 'Path saved, file NOT loaded into memory'
 
 	def save(self, path_out='', overwrite=False, write_loc=''):
 		if overwrite and self.path_in:
