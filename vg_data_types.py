@@ -16,9 +16,14 @@ from google.cloud import vision
 from google.cloud import language_v1
 from google.cloud.language_v1 import enums
 
+#not good to have here
 PROJ = 'vg-analysis'
 BUCKET = 'vg-analysis-data'
 LOCAL_PATH = '/home/nbdy/Desktop/Local/Data/game_data/'
+
+STORAGE_CLIENT = storage.Client()
+VISION_CLIENT = vision.ImageAnnotatorClient()
+LANGUAGE_CLIENT = language_v1.LanguageServiceClient()
 
 def flex_open(path, typ, loc=''):
 	if loc == 'gcs':
@@ -32,8 +37,7 @@ def flex_open_img(path, typ, loc=''):
 	if loc == 'gcs':
 		from google.cloud import storage
 		import io
-		client = storage.Client()
-		bucket = client.get_bucket(BUCKET)
+		bucket = STORAGE_CLIENT.get_bucket(BUCKET)
 		blob = bucket.get_blob(path).download_as_string()
 		bytes = io.BytesIO(blob)
 		return Image.open(bytes, typ)
@@ -82,7 +86,6 @@ class game_par:
 class game_img(game_par):
 	#3 google APIs, they all run off files stored in GCP
 	def set_api_vars(self, use_local=False):
-		self.client = vision.ImageAnnotatorClient()
 		#can use currently loaded image 
 		if use_local and self.data:
 			self.image = vision.types.Image(content=self.data)
@@ -91,25 +94,26 @@ class game_img(game_par):
 			self.image = vision.types.Image()
 			self.image.source.image_uri = 'gs://'+BUCKET+'/'+self.path_in
 			
-	def gcp_api_objects(self):
+	def gcp_api_objects(self): #not using cause of price, not set to be serialized
 		#https://cloud.google.com/vision/docs/object-localizer
-		self.img_objects = self.client.object_localization(image=self.image).localized_object_annotations
+		self.img_objects = VISION_CLIENT.object_localization(image=self.image).localized_object_annotations
 		return self.img_objects
 	
 	def gcp_api_properties(self):
 		#https://cloud.google.com/vision/docs/detecting-properties
-		self.img_properties = self.client.image_properties(image=self.image).image_properties_annotation
+		json_result = MessageToJson(VISION_CLIENT.image_properties(image=self.image).image_properties_annotation)
+		self.img_properties = json.loads(json_result)
 		return self.img_properties
 	
 	def gcp_api_labels(self):
 		#https://cloud.google.com/vision/docs/labels
-		self.img_labels = self.client.label_detection(image=self.image).label_annotations
+		result = VISION_CLIENT.label_detection(image=self.image).label_annotations
+		self.img_labels = [{'mid':_.mid, 'description':_.description, 'score':_.score, 'topicality':_.topicality} for _ in result]
 		return self.img_labels
 	
 class game_txt(game_par):
 	#3 google APIs, must run off files tored in GCP
 	def set_api_vars(self, use_local=False):
-		self.client = language_v1.LanguageServiceClient()
 		self.document = {"type": enums.Document.Type.PLAIN_TEXT, "language": 'en'} #uses dic with values as base
 		self.encoding_type = enums.EncodingType.UTF8
 		#same as image, can load from ram or file
@@ -120,15 +124,17 @@ class game_txt(game_par):
 			
 	def gcp_api_sentiment(self):
 		#https://cloud.google.com/natural-language/docs/analyzing-sentiment#language-sentiment-string-python
-		self.txt_sentiment = self.client.analyze_sentiment(self.document, encoding_type=self.encoding_type)
+		json_result = MessageToJson(LANGUAGE_CLIENT.analyze_sentiment(self.document, encoding_type=self.encoding_type))
+		self.txt_sentiment = json.loads(json_result)
 		return self.txt_sentiment
-	
-	def gcp_api_ent_sent(self):
-		#https://cloud.google.com/natural-language/docs/analyzing-entity-sentiment
-		self.txt_ent_sentiment =  self.client.analyze_entity_sentiment(self.document, encoding_type=self.encoding_type)
-		return self.txt_ent_sentiment
-	
-	def gcp_api_classify(self):
+		
+	def gcp_api_entities(self):
+		#https://cloud.google.com/natural-language/docs/analyzing-entities
+		json_result =  MessageToJson(LANGUAGE_CLIENT.analyze_entities(self.document, encoding_type=self.encoding_type))
+		self.txt_entities = json.loads(json_result)
+		return self.txt_entities
+		
+	def gcp_api_classify(self):#same as other pricey one
 		#https://cloud.google.com/natural-language/docs/classifying-text
-		self.txt_class =  self.client.classify_text(self.document)
+		self.txt_class =  LANGUAGE_CLIENT.classify_text(self.document)
 		return self.txt_class
