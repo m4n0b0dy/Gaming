@@ -52,7 +52,7 @@ class game_par:
 			elif '.bmp' in path_in:
 				self.data = flex_open_img(path_in, 'r', read_loc)
 			else:
-				print('Invalid path')
+				return 'Invalid path'
 				return
 			return 'Loaded file into memory'
 		else:
@@ -64,7 +64,7 @@ class game_par:
 			path_out = self.path_in
 		#if there is no path and no overwrite
 		elif not path_out:
-			print('Unable to save, please define path out or define path in and overwrite')
+			return 'Unable to save, please define path out or define path in and overwrite'
 			return
 		if '.json' in path_out:
 			with flex_open(path_out, 'w', write_loc) as f:
@@ -72,7 +72,7 @@ class game_par:
 		elif '.bmp' in path_out:
 			self.data = flex_open_img(path_out, 'w', write_loc)#TODO https://pillow.readthedocs.io/en/3.1.x/reference/Image.html
 		else:
-			print('Invalid path')
+			return 'Invalid path'
 
 #keeping this class very lean
 class game_img(game_par):
