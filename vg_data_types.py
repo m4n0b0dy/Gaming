@@ -3,22 +3,13 @@ import re
 from PIL import Image
 import numpy as np
 import json
-from google.cloud import vision
-from google.cloud import language_v1
-from google.cloud.language_v1 import enums
-from google.cloud import storage
 import io
-import gcsfs
 from google.protobuf.json_format import MessageToJson
 
 #not good to have here
 PROJ = 'vg-analysis'
 BUCKET = 'vg-analysis-data'
 LOCAL_PATH = '/home/nbdy/Desktop/Local/Data/game_data/'
-
-STORAGE_CLIENT = storage.Client()
-VISION_CLIENT = vision.ImageAnnotatorClient()
-LANGUAGE_CLIENT = language_v1.LanguageServiceClient()
 
 def flex_open(path, typ, loc=''):
 	if loc == 'gcs':
@@ -29,6 +20,16 @@ def flex_open(path, typ, loc=''):
 
 def flex_open_img(path, typ, loc=''):
 	if loc == 'gcs':
+		from google.cloud import vision
+		from google.cloud import language_v1
+		from google.cloud.language_v1 import enums
+		from google.cloud import storage
+		import gcsfs
+		global STORAGE_CLIENT, VISION_CLIENT, LANGUAGE_CLIENT
+		STORAGE_CLIENT = storage.Client()
+		VISION_CLIENT = vision.ImageAnnotatorClient()
+		LANGUAGE_CLIENT = language_v1.LanguageServiceClient()
+		
 		bucket = STORAGE_CLIENT.get_bucket(BUCKET)
 		blob = bucket.get_blob(path).download_as_string()
 		bytes = io.BytesIO(blob)
